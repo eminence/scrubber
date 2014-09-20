@@ -1,0 +1,26 @@
+[root]
+name = "scrubber"
+version = "0.0.1"
+dependencies = [
+ "docopt_macros 0.6.3 (git+git://github.com/docopt/docopt.rs#ee3844098f213121ce7dfb32cdbf2512ecba7085)",
+ "lazy_static 0.1.0 (git+https://github.com/Kimundi/lazy-static.rs#e62a65372f1dd9019e37eb9381d819edff80e360)",
+]
+
+[[package]]
+name = "docopt"
+version = "0.6.3"
+source = "git+git://github.com/docopt/docopt.rs#ee3844098f213121ce7dfb32cdbf2512ecba7085"
+
+[[package]]
+name = "docopt_macros"
+version = "0.6.3"
+source = "git+git://github.com/docopt/docopt.rs#ee3844098f213121ce7dfb32cdbf2512ecba7085"
+dependencies = [
+ "docopt 0.6.3 (git+git://github.com/docopt/docopt.rs#ee3844098f213121ce7dfb32cdbf2512ecba7085)",
+]
+
+[[package]]
+name = "lazy_static"
+version = "0.1.0"
+source = "git+https://github.com/Kimundi/lazy-static.rs#e62a65372f1dd9019e37eb9381d819edff80e360"
+

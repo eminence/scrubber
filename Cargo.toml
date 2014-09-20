@@ -1,0 +1,11 @@
+[package]
+
+name = "scrubber"
+version = "0.0.1"
+authors = ["Andrew Chin <achin@eminence32.net>"]
+
+[dependencies.docopt_macros]
+git = "https://github.com/docopt/docopt.rs"
+
+[dependencies.lazy_static]
+git = "https://github.com/Kimundi/lazy-static.rs"
