@@ -3,12 +3,11 @@
 
 extern crate time;
 
-use std::env::{home_dir, var_os, args_os};
-use std::path::{Path, PathBuf, AsPath};
+use std::env::{home_dir};
+use std::path::{Path, PathBuf};
 use std::fs::{read_dir, remove_dir_all};
 use std::fs::PathExt;
 use time::{Duration, now_utc, at_utc, Timespec};
-use std::thread::sleep_ms;
 
 
 
