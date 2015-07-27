@@ -1,5 +1,5 @@
 #![feature(path_ext)] 
-#![feature(fs_time)]
+//#![feature(fs_time)]
 
 extern crate time;
 
@@ -7,6 +7,7 @@ use std::env::{home_dir};
 use std::path::{Path, PathBuf};
 use std::fs::{read_dir, remove_dir_all};
 use std::fs::PathExt;
+use std::os::unix::fs::MetadataExt;
 use time::{Duration, now_utc, at_utc, Timespec};
 
 fn file_is_old<P: AsRef<Path>>(f: P) -> bool {
@@ -14,8 +15,8 @@ fn file_is_old<P: AsRef<Path>>(f: P) -> bool {
     let old = Duration::weeks(3);
     let now = now_utc();
     if let Ok(md) = f.metadata() {
-        let mda = at_utc(Timespec::new(md.accessed() as i64/1000, 0));
-        let mdm = at_utc(Timespec::new(md.modified() as i64/1000, 0));
+        let mda = at_utc(Timespec::new(md.atime() as i64/1000, 0));
+        let mdm = at_utc(Timespec::new(md.mtime() as i64/1000, 0));
 
         if (now - mda < old) || (now - mdm < old) {
             false
@@ -30,8 +31,6 @@ fn file_is_old<P: AsRef<Path>>(f: P) -> bool {
 
 
 fn can_be_removed<P: AsRef<Path>>(dir: P) -> bool {
-    let old = Duration::weeks(3);
-    let now = now_utc();
     let dir = dir.as_ref();
 
     if dir.is_file() {
