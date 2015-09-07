@@ -5,7 +5,7 @@ extern crate time;
 
 use std::env::{home_dir};
 use std::path::{Path, PathBuf};
-use std::fs::{read_dir, remove_dir_all};
+use std::fs::{read_dir, remove_file, remove_dir_all};
 use std::fs::PathExt;
 use std::os::unix::fs::MetadataExt;
 use time::{Duration, now_utc, at_utc, Timespec};
@@ -53,6 +53,16 @@ fn can_be_removed<P: AsRef<Path>>(dir: P) -> bool {
     remove
 }
 
+fn remove<P: AsRef<Path>>(path: P) {
+    let path = path.as_ref();
+    if path.is_dir() {
+        remove_dir_all(path);
+    } else {
+        remove_file(path);
+    }
+    
+}
+
 fn main() {
     let mut mytmp: PathBuf = home_dir().expect("Unable to determine HOME directory");
     mytmp.push("tmp");
@@ -63,8 +73,8 @@ fn main() {
             let entry_path = entry.path();
 
             if can_be_removed(&entry_path) {
-                println!("{} can be removed", entry_path.display());
-                remove_dir_all(entry_path);
+                //println!("{} can be removed", entry_path.display());
+                remove(&entry_path);
             } else {
                 println!("must save {}", entry_path.display());
             }
