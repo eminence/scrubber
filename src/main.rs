@@ -1,4 +1,3 @@
-#![feature(path_ext)] 
 //#![feature(fs_time)]
 
 extern crate time;
@@ -6,7 +5,6 @@ extern crate time;
 use std::env::{home_dir};
 use std::path::{Path, PathBuf};
 use std::fs::{read_dir, remove_file, remove_dir_all};
-use std::fs::PathExt;
 use std::os::unix::fs::MetadataExt;
 use time::{Duration, now_utc, at_utc, Timespec};
 
@@ -15,16 +13,17 @@ fn file_is_old<P: AsRef<Path>>(f: P) -> bool {
     let old = Duration::weeks(3);
     let now = now_utc();
     if let Ok(md) = f.metadata() {
-        let mda = at_utc(Timespec::new(md.atime() as i64/1000, 0));
-        let mdm = at_utc(Timespec::new(md.mtime() as i64/1000, 0));
+        let mda = at_utc(Timespec::new(md.atime() as i64, 0));
+        let mdm = at_utc(Timespec::new(md.mtime() as i64, 0));
 
         if (now - mda < old) || (now - mdm < old) {
             false
         } else {
+            //println!("{:?} is old", f);
             true
         }
     } else {
-        println!("Warning: unable to get metadata for entry");
+        println!("Warning: unable to get metadata for entry {:?}", f);
         false
     }
 }
@@ -42,12 +41,13 @@ fn can_be_removed<P: AsRef<Path>>(dir: P) -> bool {
     for entry in read_dir(dir).unwrap() {
         let entry = entry.unwrap().path();
         if entry.is_dir() {
-            remove = remove || can_be_removed(entry);
+            remove = remove && can_be_removed(entry);
         } else {
             if !file_is_old(entry) {
                 remove = false;
             }
         }
+        if !remove { break; }
     }
 
     remove
