@@ -58,8 +58,8 @@ fn can_be_removed<P: AsRef<Path>>(dir: P) -> Removable {
 
     if dir.is_file() {
         return match file_is_old(dir) {
-            True => Removable::True,
-            False => Removable::False(dir.to_owned())
+            true => Removable::True,
+            false => Removable::False(dir.to_owned())
         }
     } // else is_dir
 
