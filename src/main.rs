@@ -1,10 +1,10 @@
-extern crate time;
 extern crate clap;
+extern crate time;
 
 use std::env::home_dir;
 use std::path::{Path, PathBuf};
-use std::fs::{read_dir, remove_file, remove_dir_all};
-use std::time::{SystemTime, Duration};
+use std::fs::{read_dir, remove_dir_all, remove_file};
+use std::time::{Duration, SystemTime};
 
 fn file_is_old<P: AsRef<Path>>(f: P) -> bool {
     let f: &Path = f.as_ref();
@@ -14,9 +14,12 @@ fn file_is_old<P: AsRef<Path>>(f: P) -> bool {
         let mda = md.accessed().ok();
         let mdm = md.modified().ok();
 
-        let keep_due_to_mtime: bool = mdm.map_or(true, |t| now.duration_since(t).map(|t| t < old).unwrap_or(true));
-        let keep_due_to_atime: bool = mda.map_or(true, |t| now.duration_since(t).map(|t| t < old).unwrap_or(true));
-
+        let keep_due_to_mtime: bool = mdm.map_or(true, |t| {
+            now.duration_since(t).map(|t| t < old).unwrap_or(true)
+        });
+        let keep_due_to_atime: bool = mda.map_or(true, |t| {
+            now.duration_since(t).map(|t| t < old).unwrap_or(true)
+        });
 
         if keep_due_to_mtime || keep_due_to_atime {
             false
@@ -33,7 +36,7 @@ fn file_is_old<P: AsRef<Path>>(f: P) -> bool {
 enum Removable {
     True,
     /// If this path can't be removed, include why
-    False(PathBuf)
+    False(PathBuf),
 }
 
 impl Removable {
@@ -59,10 +62,9 @@ fn can_be_removed<P: AsRef<Path>>(dir: P) -> Removable {
     if dir.is_file() {
         return match file_is_old(dir) {
             true => Removable::True,
-            false => Removable::False(dir.to_owned())
-        }
+            false => Removable::False(dir.to_owned()),
+        };
     } // else is_dir
-
 
     let mut remove = Removable::True;
     for entry in read_dir(dir).unwrap() {
@@ -72,7 +74,7 @@ fn can_be_removed<P: AsRef<Path>>(dir: P) -> Removable {
         } else {
             if !file_is_old(&entry) {
                 remove = Removable::False(entry.to_owned());
-//                println!("{:?} has been modified recently", entry);
+                //                println!("{:?} has been modified recently", entry);
             }
         }
         if !remove.as_bool() {
@@ -90,27 +92,31 @@ fn remove<P: AsRef<Path>>(path: P) {
     } else {
         remove_file(path).unwrap();
     }
-
 }
 
 fn main() {
     use clap::{App, Arg};
 
-    let matches =
-        App::new("scrubber")
+    let matches = App::new("scrubber")
         .version("0.0.1")
         .about("Removes unused folders from a temp directory")
-        .arg(Arg::with_name("rm")
-             .long("rm")
-             .help("Actually remove directories"))
-        .arg(Arg::with_name("tmpdir")
-             .index(1)
-             .required(false)
-             .help("Path to tempdir.  Defaults to $HOME/tmp"))
-            .arg(Arg::with_name("verbose")
+        .arg(
+            Arg::with_name("rm")
+                .long("rm")
+                .help("Actually remove directories"),
+        )
+        .arg(
+            Arg::with_name("tmpdir")
+                .index(1)
+                .required(false)
+                .help("Path to tempdir.  Defaults to $HOME/tmp"),
+        )
+        .arg(
+            Arg::with_name("verbose")
                 .short("v")
                 .long("verbose")
-                .help("More verbose output"))
+                .help("More verbose output"),
+        )
         .get_matches();
 
     let verbose = matches.is_present("verbose");
@@ -123,12 +129,10 @@ fn main() {
         }
         p
     } else {
-
         let mut mytmp: PathBuf = home_dir().expect("Unable to determine HOME directory");
         mytmp.push("tmp");
         mytmp
     };
-
 
     let ok_to_remove = matches.is_present("rm");
 
@@ -139,12 +143,15 @@ fn main() {
             // only consider directories that seem to be a 2-digit number
             let file_name = entry.file_name();
             let name = file_name.to_string_lossy();
-            if !(name.len() == 2 &&
-                 name.char_indices().all(|(idx, chr)| idx < 2 && chr.is_digit(10))) {
-                if verbose { println!("Will not examine {}", entry_path.display()); }
+            if !(name.len() == 2
+                && name.char_indices()
+                    .all(|(idx, chr)| idx < 2 && chr.is_digit(10)))
+            {
+                if verbose {
+                    println!("Will not examine {}", entry_path.display());
+                }
                 continue;
             }
-
 
             match can_be_removed(&entry_path) {
                 Removable::True => {
@@ -154,15 +161,15 @@ fn main() {
                     }
                 }
                 Removable::False(why) => {
-                    println!("must save {} (because of {})", entry_path.display(), why.display());
+                    println!(
+                        "must save {} (because of {})",
+                        entry_path.display(),
+                        why.display()
+                    );
                 }
             }
         } else {
             println!("Warning: Unable to read {:?}", entry.err());
         }
-
     }
-
-
-
 }
