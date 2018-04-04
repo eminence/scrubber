@@ -107,8 +107,13 @@ fn main() {
              .index(1)
              .required(false)
              .help("Path to tempdir.  Defaults to $HOME/tmp"))
+            .arg(Arg::with_name("verbose")
+                .short("v")
+                .long("verbose")
+                .help("More verbose output"))
         .get_matches();
 
+    let verbose = matches.is_present("verbose");
 
     let mytmp: PathBuf = if let Some(t) = matches.value_of("tmpdir") {
         let p = PathBuf::from(t);
@@ -136,7 +141,7 @@ fn main() {
             let name = file_name.to_string_lossy();
             if !(name.len() == 2 &&
                  name.char_indices().all(|(idx, chr)| idx < 2 && chr.is_digit(10))) {
-                println!("Will not examine {}", entry_path.display());
+                if verbose { println!("Will not examine {}", entry_path.display()); }
                 continue;
             }
 
