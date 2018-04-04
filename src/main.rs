@@ -5,6 +5,16 @@ use std::env::home_dir;
 use std::path::{Path, PathBuf};
 use std::fs::{read_dir, remove_dir_all, remove_file};
 use std::time::{Duration, SystemTime};
+use std::ffi::OsString;
+use std::env::var_os;
+
+fn get_username() -> OsString {
+    if cfg!(windows) {
+        var_os("USERNAME").expect("Unknown username")
+    } else {
+        var_os("USER").expect("Unknown username")
+    }
+}
 
 fn file_is_old<P: AsRef<Path>>(f: P) -> bool {
     let f: &Path = f.as_ref();
@@ -109,7 +119,7 @@ fn main() {
             Arg::with_name("tmpdir")
                 .index(1)
                 .required(false)
-                .help("Path to tempdir.  Defaults to $HOME/tmp"),
+                .help("Path to tempdir.  Defaults to $HOME/tmp or $TMPDIR/$USERNAME"),
         )
         .arg(
             Arg::with_name("verbose")
@@ -131,10 +141,26 @@ fn main() {
     } else {
         let mut mytmp: PathBuf = home_dir().expect("Unable to determine HOME directory");
         mytmp.push("tmp");
-        mytmp
+
+        if mytmp.exists() {
+            mytmp
+        } else {
+            // try $TMPDIR/$USERNAME
+            if let Some(tmpdir) = var_os("TMPDIR") {
+                let username = get_username();
+                PathBuf::from(tmpdir).join(username)
+            } else {
+                mytmp // even though it doesn't exist, it's still the default
+            }
+        }
     };
 
     let ok_to_remove = matches.is_present("rm");
+
+    if !mytmp.exists() {
+        println!("{} does not exist!", mytmp.display());
+        std::process::exit(1);
+    }
 
     for entry in read_dir(&mytmp).unwrap_or_else(|_| panic!("Unable to read_dir: {:?}", mytmp)) {
         if let Ok(entry) = entry {
