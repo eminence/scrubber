@@ -6,3 +6,4 @@ authors = ["Andrew Chin <achin@eminence32.net>"]
 [dependencies]
 time = "0.1"
 clap = "2"
+failure = "0.1"

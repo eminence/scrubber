@@ -1,5 +1,6 @@
 extern crate clap;
 extern crate time;
+extern crate failure;
 
 use std::env::home_dir;
 use std::path::{Path, PathBuf};
@@ -7,6 +8,8 @@ use std::fs::{read_dir, remove_dir_all, remove_file};
 use std::time::{Duration, SystemTime};
 use std::ffi::OsString;
 use std::env::var_os;
+
+use failure::Error;
 
 fn get_username() -> OsString {
     if cfg!(windows) {
@@ -66,21 +69,21 @@ impl Removable {
     }
 }
 
-fn can_be_removed<P: AsRef<Path>>(dir: P) -> Removable {
+fn can_be_removed<P: AsRef<Path>>(dir: P) -> Result<Removable, Error> {
     let dir = dir.as_ref();
 
     if dir.is_file() {
         return match file_is_old(dir) {
-            true => Removable::True,
-            false => Removable::False(dir.to_owned()),
+            true => Ok(Removable::True),
+            false => Ok(Removable::False(dir.to_owned())),
         };
     } // else is_dir
 
     let mut remove = Removable::True;
-    for entry in read_dir(dir).unwrap() {
-        let entry = entry.unwrap().path();
+    for entry in read_dir(dir)? {
+        let entry = entry?.path();
         if entry.is_dir() {
-            remove.and(can_be_removed(entry));
+            remove.and(can_be_removed(entry)?);
         } else {
             if !file_is_old(&entry) {
                 remove = Removable::False(entry.to_owned());
@@ -92,15 +95,15 @@ fn can_be_removed<P: AsRef<Path>>(dir: P) -> Removable {
         }
     }
 
-    remove
+    Ok(remove)
 }
 
-fn remove<P: AsRef<Path>>(path: P) {
+fn remove<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
     let path = path.as_ref();
     if path.is_dir() {
-        remove_dir_all(path).unwrap();
+        remove_dir_all(path)
     } else {
-        remove_file(path).unwrap();
+        remove_file(path)
     }
 }
 
@@ -180,18 +183,23 @@ fn main() {
             }
 
             match can_be_removed(&entry_path) {
-                Removable::True => {
+                Ok(Removable::True) => {
                     println!("{} can be removed", entry_path.display());
                     if ok_to_remove {
-                        remove(&entry_path);
+                        if let Err(e) = remove(&entry_path) {
+                            println!("Error removing {}: {}", entry_path.display(), e);
+                        }
                     }
                 }
-                Removable::False(why) => {
+                Ok(Removable::False(why)) => {
                     println!(
                         "must save {} (because of {})",
                         entry_path.display(),
                         why.display()
                     );
+                }
+                Err(e) => {
+                    println!("Unable to read {}: {}", entry_path.display(), e)
                 }
             }
         } else {
