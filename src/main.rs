@@ -1,6 +1,5 @@
 extern crate clap;
 extern crate time;
-extern crate failure;
 
 use std::env::home_dir;
 use std::path::{Path, PathBuf};
@@ -9,7 +8,6 @@ use std::time::{Duration, SystemTime};
 use std::ffi::OsString;
 use std::env::var_os;
 
-use failure::Error;
 
 fn get_username() -> OsString {
     if cfg!(windows) {
@@ -69,7 +67,8 @@ impl Removable {
     }
 }
 
-fn can_be_removed<P: AsRef<Path>>(dir: P) -> Result<Removable, Error> {
+
+fn can_be_removed<P: AsRef<Path>>(dir: P) -> Result<Removable, std::io::Error> {
     let dir = dir.as_ref();
 
     if dir.is_file() {
