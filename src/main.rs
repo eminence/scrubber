@@ -1,7 +1,8 @@
 extern crate clap;
 extern crate time;
+extern crate dirs;
 
-use std::env::home_dir;
+use dirs::home_dir;
 use std::path::{Path, PathBuf};
 use std::fs::{read_dir, remove_dir_all, remove_file};
 use std::time::{Duration, SystemTime};
