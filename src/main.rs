@@ -33,12 +33,7 @@ fn file_is_old<P: AsRef<Path>>(f: P) -> bool {
             now.duration_since(t).map(|t| t < old).unwrap_or(true)
         });
 
-        if keep_due_to_mtime || keep_due_to_atime {
-            false
-        } else {
-            //println!("{:?} is old", f);
-            true
-        }
+        !(keep_due_to_mtime || keep_due_to_atime)
     } else {
         println!("Warning: unable to get metadata for entry {:?}", f);
         false
@@ -74,9 +69,10 @@ fn can_be_removed<P: AsRef<Path>>(dir: P) -> Result<Removable, std::io::Error> {
     let dir = dir.as_ref();
 
     if dir.is_file() {
-        return match file_is_old(dir) {
-            true => Ok(Removable::True),
-            false => Ok(Removable::False(dir.to_owned())),
+        return if file_is_old(dir) {
+             Ok(Removable::True)
+        } else {
+            Ok(Removable::False(dir.to_owned()))
         };
     } // else is_dir
 
@@ -91,11 +87,8 @@ fn can_be_removed<P: AsRef<Path>>(dir: P) -> Result<Removable, std::io::Error> {
         let entry = entry?.path();
         if entry.is_dir() {
             remove.and(can_be_removed(entry)?);
-        } else {
-            if !file_is_old(&entry) {
-                remove = Removable::False(entry.to_owned());
-                //                println!("{:?} has been modified recently", entry);
-            }
+        } else if !file_is_old(&entry) {
+            remove = Removable::False(entry.to_owned());
         }
         if let Removable::True = remove {
             break;
