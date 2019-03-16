@@ -1,14 +1,13 @@
 extern crate clap;
-extern crate time;
 extern crate dirs;
+extern crate time;
 
 use dirs::home_dir;
-use std::path::{Path, PathBuf};
-use std::fs::{read_dir, remove_dir_all, remove_file, remove_dir};
-use std::time::{Duration, SystemTime};
-use std::ffi::OsString;
 use std::env::var_os;
-
+use std::ffi::OsString;
+use std::fs::{read_dir, remove_dir, remove_dir_all, remove_file};
+use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
 fn get_username() -> OsString {
     if cfg!(windows) {
@@ -57,20 +56,17 @@ impl Removable {
             Removable::False(thing) => {
                 *self = Removable::False(thing);
             }
-            _ => {
-                *self = Removable::True
-            }
+            _ => *self = Removable::True,
         }
     }
 }
-
 
 fn can_be_removed<P: AsRef<Path>>(dir: P) -> Result<Removable, std::io::Error> {
     let dir = dir.as_ref();
 
     if dir.is_file() {
         return if file_is_old(dir) {
-             Ok(Removable::True)
+            Ok(Removable::True)
         } else {
             Ok(Removable::False(dir.to_owned()))
         };
@@ -173,7 +169,8 @@ fn main() {
             let file_name = entry.file_name();
             let name = file_name.to_string_lossy();
             if !(name.len() == 2
-                && name.char_indices()
+                && name
+                    .char_indices()
                     .all(|(idx, chr)| idx < 2 && chr.is_digit(10)))
             {
                 if verbose {
@@ -204,9 +201,7 @@ fn main() {
                         why.display()
                     );
                 }
-                Err(e) => {
-                    println!("Unable to read {}: {}", entry_path.display(), e)
-                }
+                Err(e) => println!("Unable to read {}: {}", entry_path.display(), e),
             }
         } else {
             println!("Warning: Unable to read {:?}", entry.err());
