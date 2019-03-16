@@ -4,7 +4,7 @@ extern crate dirs;
 
 use dirs::home_dir;
 use std::path::{Path, PathBuf};
-use std::fs::{read_dir, remove_dir_all, remove_file};
+use std::fs::{read_dir, remove_dir_all, remove_file, remove_dir};
 use std::time::{Duration, SystemTime};
 use std::ffi::OsString;
 use std::env::var_os;
@@ -46,24 +46,25 @@ fn file_is_old<P: AsRef<Path>>(f: P) -> bool {
 }
 
 enum Removable {
+    /// A directory is always removable if it is empty
+    Always,
     True,
     /// If this path can't be removed, include why
     False(PathBuf),
 }
 
 impl Removable {
-    fn as_bool(&self) -> bool {
-        match *self {
-            Removable::True => true,
-            Removable::False(_) => false,
-        }
-    }
     fn and(&mut self, other: Removable) {
         if let Removable::False(_) = *self {
             return;
         }
-        if let Removable::False(thing) = other {
-            *self = Removable::False(thing);
+        match other {
+            Removable::False(thing) => {
+                *self = Removable::False(thing);
+            }
+            _ => {
+                *self = Removable::True
+            }
         }
     }
 }
@@ -79,8 +80,14 @@ fn can_be_removed<P: AsRef<Path>>(dir: P) -> Result<Removable, std::io::Error> {
         };
     } // else is_dir
 
+    let mut dirs = read_dir(dir)?.peekable();
+    if dirs.peek().is_none() {
+        // there are no entries in this directory, and we can delete it without prompting
+        return Ok(Removable::Always);
+    }
+
     let mut remove = Removable::True;
-    for entry in read_dir(dir)? {
+    for entry in dirs {
         let entry = entry?.path();
         if entry.is_dir() {
             remove.and(can_be_removed(entry)?);
@@ -90,7 +97,7 @@ fn can_be_removed<P: AsRef<Path>>(dir: P) -> Result<Removable, std::io::Error> {
                 //                println!("{:?} has been modified recently", entry);
             }
         }
-        if !remove.as_bool() {
+        if let Removable::True = remove {
             break;
         }
     }
@@ -183,6 +190,12 @@ fn main() {
             }
 
             match can_be_removed(&entry_path) {
+                Ok(Removable::Always) => {
+                    println!("{} is empty and will be removed", entry_path.display());
+                    if let Err(e) = remove_dir(&entry_path) {
+                        println!("Error removing {}: {}", entry_path.display(), e);
+                    }
+                }
                 Ok(Removable::True) => {
                     println!("{} can be removed", entry_path.display());
                     if ok_to_remove {
