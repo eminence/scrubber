@@ -7,3 +7,4 @@ authors = ["Andrew Chin <achin@eminence32.net>"]
 time = "0.1"
 clap = "2"
 dirs = "1"
+walkdir = "2"

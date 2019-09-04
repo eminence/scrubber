@@ -1,11 +1,13 @@
 extern crate clap;
 extern crate dirs;
 extern crate time;
+extern crate walkdir;
 
 use dirs::home_dir;
+use walkdir::WalkDir;
 use std::env::var_os;
 use std::ffi::OsString;
-use std::fs::{read_dir, remove_dir, remove_dir_all, remove_file};
+use std::fs::{read_dir, remove_dir, remove_file, set_permissions};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
@@ -94,13 +96,22 @@ fn can_be_removed<P: AsRef<Path>>(dir: P) -> Result<Removable, std::io::Error> {
     Ok(remove)
 }
 
+/// Recursively clears the read-only flag on every file in this path, and remove them
 fn remove<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
-    let path = path.as_ref();
-    if path.is_dir() {
-        remove_dir_all(path)
-    } else {
-        remove_file(path)
+    for entry in WalkDir::new(path).follow_links(false).same_file_system(true).contents_first(true) {
+        let entry = entry?;
+        if entry.file_type().is_file() {
+            if let Ok(md) = entry.metadata() {
+                let mut perms = md.permissions();
+                perms.set_readonly(false);
+                set_permissions(entry.path(), perms)?;
+                remove_file(entry.path())?;
+            }
+        } else if entry.file_type().is_dir() {
+            remove_dir(entry.path())?;
+        }
     }
+    Ok(())
 }
 
 fn main() {
