@@ -2,9 +2,10 @@
 name = "scrubber"
 version = "0.0.1"
 authors = ["Andrew Chin <achin@eminence32.net>"]
+edition = "2018"
 
 [dependencies]
 time = "0.1"
 clap = "2"
-dirs = "1"
+dirs = "2"
 walkdir = "2"
