@@ -227,7 +227,6 @@ fn main() {
                         if let Err(e) = remove(&entry_path) {
                             println!("Error removing {}: {}", entry_path.display(), e);
                         }
-                        break;
                     }
                 }
                 Ok(Removable::False(why)) => {
