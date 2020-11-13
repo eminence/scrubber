@@ -1,10 +1,11 @@
 use dirs::home_dir;
-use std::env::var_os;
+use std::{fs::symlink_metadata, env::var_os};
 use std::ffi::OsString;
 use std::fs::{read_dir, remove_dir, remove_file, set_permissions};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 use walkdir::WalkDir;
+use clap::{App, Arg};
 
 fn get_username() -> OsString {
     if cfg!(windows) {
@@ -18,7 +19,7 @@ fn file_is_old<P: AsRef<Path>>(f: P) -> bool {
     let f: &Path = f.as_ref();
     let old = Duration::from_secs(60 * 60 * 24 * 21);
     let now = SystemTime::now();
-    if let Ok(md) = f.metadata() {
+    if let Ok(md) = symlink_metadata(f) {
         let mda = md.accessed().ok();
         let mdm = md.modified().ok();
 
@@ -83,7 +84,8 @@ fn can_be_removed<P: AsRef<Path>>(dir: P) -> Result<Removable, std::io::Error> {
         } else if !file_is_old(&entry) {
             remove = Removable::False(entry.to_owned());
         }
-        if let Removable::True = remove {
+        if let Removable::False(..) = remove {
+            // we have at least 1 file that we can't removed, so no need to check any other files
             break;
         }
     }
@@ -114,7 +116,6 @@ fn remove<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
 }
 
 fn main() {
-    use clap::{App, Arg};
 
     let matches = App::new("scrubber")
         .version("0.0.1")
