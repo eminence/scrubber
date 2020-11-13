@@ -1,11 +1,11 @@
+use clap::{App, Arg};
 use dirs::home_dir;
-use std::{fs::symlink_metadata, env::var_os};
 use std::ffi::OsString;
 use std::fs::{read_dir, remove_dir, remove_file, set_permissions};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
+use std::{env::var_os, fs::symlink_metadata};
 use walkdir::WalkDir;
-use clap::{App, Arg};
 
 fn get_username() -> OsString {
     if cfg!(windows) {
@@ -15,7 +15,7 @@ fn get_username() -> OsString {
     }
 }
 
-fn file_is_old<P: AsRef<Path>>(f: P) -> bool {
+fn file_is_old<P: AsRef<Path>>(f: P) -> (bool, u64) {
     let f: &Path = f.as_ref();
     let old = Duration::from_secs(60 * 60 * 24 * 21);
     let now = SystemTime::now();
@@ -30,31 +30,45 @@ fn file_is_old<P: AsRef<Path>>(f: P) -> bool {
             now.duration_since(t).map(|t| t < old).unwrap_or(true)
         });
 
-        !(keep_due_to_mtime || keep_due_to_atime)
+        (!(keep_due_to_mtime || keep_due_to_atime), md.len())
     } else {
         println!("Warning: unable to get metadata for entry {:?}", f);
-        false
+        (false, 0)
     }
 }
 
 enum Removable {
     /// A directory is always removable if it is empty
     Always,
-    True,
+    /// We can remove a folder/file, freeing up some space
+    True(u64),
     /// If this path can't be removed, include why
     False(PathBuf),
 }
 
 impl Removable {
     fn and(&mut self, other: Removable) {
-        if let Removable::False(_) = *self {
-            return;
-        }
-        match other {
-            Removable::False(thing) => {
-                *self = Removable::False(thing);
+        match (self, other) {
+            (Removable::False(_), _) => {
+                // i am not removable, so it doesn't matter that the `other` is
+                return;
             }
-            _ => *self = Removable::True,
+
+            (Removable::Always, Removable::Always) => {
+                return;
+            }
+
+            (me, o @ Removable::False(_)) => *me = o,
+
+            (Removable::True(my_size), Removable::True(other_size)) => *my_size += other_size,
+
+            (Removable::True(..), Removable::Always) => {
+                return;
+            }
+
+            (Removable::Always, Removable::True(..)) => {
+                panic!()
+            }
         }
     }
 }
@@ -63,8 +77,9 @@ fn can_be_removed<P: AsRef<Path>>(dir: P) -> Result<Removable, std::io::Error> {
     let dir = dir.as_ref();
 
     if dir.is_file() {
-        return if file_is_old(dir) {
-            Ok(Removable::True)
+        let (is_old, size) = file_is_old(dir);
+        return if is_old {
+            Ok(Removable::True(size))
         } else {
             Ok(Removable::False(dir.to_owned()))
         };
@@ -76,13 +91,19 @@ fn can_be_removed<P: AsRef<Path>>(dir: P) -> Result<Removable, std::io::Error> {
         return Ok(Removable::Always);
     }
 
-    let mut remove = Removable::True;
+    let mut remove = Removable::True(0);
     for entry in dirs {
         let entry = entry?.path();
         if entry.is_dir() {
             remove.and(can_be_removed(entry)?);
-        } else if !file_is_old(&entry) {
-            remove = Removable::False(entry.to_owned());
+        } else {
+            let (is_old, size) = file_is_old(&entry);
+            if !is_old {
+                remove = Removable::False(entry.to_owned());
+            }
+            if let Removable::True(s) = &mut remove {
+                *s += size;
+            }
         }
         if let Removable::False(..) = remove {
             // we have at least 1 file that we can't removed, so no need to check any other files
@@ -116,7 +137,6 @@ fn remove<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
 }
 
 fn main() {
-
     let matches = App::new("scrubber")
         .version("0.0.1")
         .about("Removes unused folders from a temp directory")
@@ -197,12 +217,17 @@ fn main() {
                         println!("Error removing {}: {}", entry_path.display(), e);
                     }
                 }
-                Ok(Removable::True) => {
-                    println!("{} can be removed", entry_path.display());
+                Ok(Removable::True(size)) => {
+                    println!(
+                        "{} can be removed (saving {:.1} GB)",
+                        entry_path.display(),
+                        size as f32 / 1000000000.0
+                    );
                     if ok_to_remove {
                         if let Err(e) = remove(&entry_path) {
                             println!("Error removing {}: {}", entry_path.display(), e);
                         }
+                        break;
                     }
                 }
                 Ok(Removable::False(why)) => {
