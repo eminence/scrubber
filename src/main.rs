@@ -45,7 +45,7 @@ enum Removable {
     /// A directory is always removable if it is empty
     Always,
     /// We can remove a folder/file, freeing up some space
-    True(u64),
+    True { size: u64 },
     /// If this path can't be removed, include why
     False(PathBuf),
 }
@@ -64,13 +64,15 @@ impl Removable {
 
             (me, o @ Removable::False(_)) => *me = o,
 
-            (Removable::True(my_size), Removable::True(other_size)) => *my_size += other_size,
+            (Removable::True { size: my_size }, Removable::True { size: other_size }) => {
+                *my_size += other_size
+            }
 
-            (Removable::True(..), Removable::Always) => {
+            (Removable::True { .. }, Removable::Always) => {
                 return;
             }
 
-            (Removable::Always, Removable::True(..)) => {
+            (Removable::Always, Removable::True { .. }) => {
                 panic!()
             }
         }
@@ -83,7 +85,7 @@ fn can_be_removed<P: AsRef<Path>>(dir: P, use_atime: bool) -> Result<Removable, 
     if dir.is_file() {
         let (is_old, size) = file_is_old(dir, use_atime);
         return if is_old {
-            Ok(Removable::True(size))
+            Ok(Removable::True { size })
         } else {
             Ok(Removable::False(dir.to_owned()))
         };
@@ -95,7 +97,7 @@ fn can_be_removed<P: AsRef<Path>>(dir: P, use_atime: bool) -> Result<Removable, 
         return Ok(Removable::Always);
     }
 
-    let mut remove = Removable::True(0);
+    let mut remove = Removable::True { size: 0 };
     for entry in dirs {
         let entry = entry?.path();
         if entry.is_dir() {
@@ -105,7 +107,7 @@ fn can_be_removed<P: AsRef<Path>>(dir: P, use_atime: bool) -> Result<Removable, 
             if !is_old {
                 remove = Removable::False(entry.to_owned());
             }
-            if let Removable::True(s) = &mut remove {
+            if let Removable::True { size: s } = &mut remove {
                 *s += size;
             }
         }
@@ -227,7 +229,7 @@ fn main() {
                         println!("Error removing {}: {}", entry_path.display(), e);
                     }
                 }
-                Ok(Removable::True(size)) => {
+                Ok(Removable::True { size }) => {
                     println!(
                         "{} can be removed (saving {:.1} GB)",
                         entry_path.display(),
