@@ -15,7 +15,7 @@ fn get_username() -> OsString {
     }
 }
 
-fn file_is_old<P: AsRef<Path>>(f: P) -> (bool, u64) {
+fn file_is_old<P: AsRef<Path>>(f: P, use_atime: bool) -> (bool, u64) {
     let f: &Path = f.as_ref();
     let old = Duration::from_secs(60 * 60 * 24 * 21);
     let now = SystemTime::now();
@@ -26,11 +26,15 @@ fn file_is_old<P: AsRef<Path>>(f: P) -> (bool, u64) {
         let keep_due_to_mtime: bool = mdm.map_or(true, |t| {
             now.duration_since(t).map(|t| t < old).unwrap_or(true)
         });
-        let keep_due_to_atime: bool = mda.map_or(true, |t| {
-            now.duration_since(t).map(|t| t < old).unwrap_or(true)
-        });
 
-        (!(keep_due_to_mtime || keep_due_to_atime), md.len())
+        if use_atime {
+            let keep_due_to_atime: bool = mda.map_or(true, |t| {
+                now.duration_since(t).map(|t| t < old).unwrap_or(true)
+            });
+            (!(keep_due_to_mtime || keep_due_to_atime), md.len())
+        } else {
+            (!keep_due_to_mtime, md.len())
+        }
     } else {
         println!("Warning: unable to get metadata for entry {:?}", f);
         (false, 0)
@@ -73,11 +77,11 @@ impl Removable {
     }
 }
 
-fn can_be_removed<P: AsRef<Path>>(dir: P) -> Result<Removable, std::io::Error> {
+fn can_be_removed<P: AsRef<Path>>(dir: P, use_atime: bool) -> Result<Removable, std::io::Error> {
     let dir = dir.as_ref();
 
     if dir.is_file() {
-        let (is_old, size) = file_is_old(dir);
+        let (is_old, size) = file_is_old(dir, use_atime);
         return if is_old {
             Ok(Removable::True(size))
         } else {
@@ -95,9 +99,9 @@ fn can_be_removed<P: AsRef<Path>>(dir: P) -> Result<Removable, std::io::Error> {
     for entry in dirs {
         let entry = entry?.path();
         if entry.is_dir() {
-            remove.and(can_be_removed(entry)?);
+            remove.and(can_be_removed(entry, use_atime)?);
         } else {
-            let (is_old, size) = file_is_old(&entry);
+            let (is_old, size) = file_is_old(&entry, use_atime);
             if !is_old {
                 remove = Removable::False(entry.to_owned());
             }
@@ -146,6 +150,11 @@ fn main() {
                 .help("Actually remove directories"),
         )
         .arg(
+            Arg::with_name("no-atime")
+                .long("no-atime")
+                .help("Don't consider atime (only look at mtime)"),
+        )
+        .arg(
             Arg::with_name("tmpdir")
                 .index(1)
                 .required(false)
@@ -186,6 +195,7 @@ fn main() {
     };
 
     let ok_to_remove = matches.is_present("rm");
+    let use_atime = !matches.is_present("no-atime");
 
     if !mytmp.exists() {
         println!("{} does not exist!", mytmp.display());
@@ -210,7 +220,7 @@ fn main() {
                 continue;
             }
 
-            match can_be_removed(&entry_path) {
+            match can_be_removed(&entry_path, use_atime) {
                 Ok(Removable::Always) => {
                     println!("{} is empty and will be removed", entry_path.display());
                     if let Err(e) = remove_dir(&entry_path) {
