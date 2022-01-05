@@ -1,5 +1,6 @@
 use clap::{App, Arg};
 use dirs::home_dir;
+use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fs::{read_dir, remove_dir, remove_file, set_permissions};
 use std::path::{Path, PathBuf};
@@ -15,7 +16,8 @@ fn get_username() -> OsString {
     }
 }
 
-fn file_is_old<P: AsRef<Path>>(f: P, use_atime: bool) -> (bool, u64) {
+/// Returns tuple: (is file old?  size of file,  timestamp)
+fn file_is_old<P: AsRef<Path>>(f: P, use_atime: bool) -> (bool, u64, Option<SystemTime>) {
     let f: &Path = f.as_ref();
     let old = Duration::from_secs(60 * 60 * 24 * 21);
     let now = SystemTime::now();
@@ -31,13 +33,17 @@ fn file_is_old<P: AsRef<Path>>(f: P, use_atime: bool) -> (bool, u64) {
             let keep_due_to_atime: bool = mda.map_or(true, |t| {
                 now.duration_since(t).map(|t| t < old).unwrap_or(true)
             });
-            (!(keep_due_to_mtime || keep_due_to_atime), md.len())
+            (
+                !(keep_due_to_mtime || keep_due_to_atime),
+                md.len(),
+                md.accessed().ok(),
+            )
         } else {
-            (!keep_due_to_mtime, md.len())
+            (!keep_due_to_mtime, md.len(), md.modified().ok())
         }
     } else {
         println!("Warning: unable to get metadata for entry {:?}", f);
-        (false, 0)
+        (false, 0, None)
     }
 }
 
@@ -45,7 +51,12 @@ enum Removable {
     /// A directory is always removable if it is empty
     Always,
     /// We can remove a folder/file, freeing up some space
-    True { size: u64 },
+    True {
+        /// The total size of the thing to be removed
+        size: u64,
+        /// The most recent timestamp of the thing to be removed
+        timestamp: Option<SystemTime>,
+    },
     /// If this path can't be removed, include why
     False(PathBuf),
 }
@@ -64,8 +75,28 @@ impl Removable {
 
             (me, o @ Removable::False(_)) => *me = o,
 
-            (Removable::True { size: my_size }, Removable::True { size: other_size }) => {
-                *my_size += other_size
+            (
+                Removable::True {
+                    size: my_size,
+                    timestamp,
+                },
+                Removable::True {
+                    size: other_size,
+                    timestamp: other_ts,
+                },
+            ) => {
+                match (timestamp, other_ts) {
+                    (None, None) => {}
+                    (a @ None, other @ Some(_)) => *a = other,
+                    (Some(_), None) => {}
+                    (Some(me), Some(other)) => {
+                        // take the most recent ts
+                        if other > *me {
+                            *me = other;
+                        }
+                    }
+                };
+                *my_size += other_size;
             }
 
             (Removable::True { .. }, Removable::Always) => {
@@ -83,9 +114,12 @@ fn can_be_removed<P: AsRef<Path>>(dir: P, use_atime: bool) -> Result<Removable, 
     let dir = dir.as_ref();
 
     if dir.is_file() {
-        let (is_old, size) = file_is_old(dir, use_atime);
+        let (is_old, size, ts) = file_is_old(dir, use_atime);
         return if is_old {
-            Ok(Removable::True { size })
+            Ok(Removable::True {
+                size,
+                timestamp: ts,
+            })
         } else {
             Ok(Removable::False(dir.to_owned()))
         };
@@ -97,18 +131,30 @@ fn can_be_removed<P: AsRef<Path>>(dir: P, use_atime: bool) -> Result<Removable, 
         return Ok(Removable::Always);
     }
 
-    let mut remove = Removable::True { size: 0 };
+    let mut remove = Removable::True {
+        size: 0,
+        timestamp: None,
+    };
     for entry in dirs {
         let entry = entry?.path();
         if entry.is_dir() {
             remove.and(can_be_removed(entry, use_atime)?);
         } else {
-            let (is_old, size) = file_is_old(&entry, use_atime);
+            let (is_old, size, this_ts) = file_is_old(&entry, use_atime);
             if !is_old {
                 remove = Removable::False(entry.to_owned());
             }
-            if let Removable::True { size: s } = &mut remove {
+            if let Removable::True { size: s, timestamp } = &mut remove {
                 *s += size;
+                match (timestamp, this_ts) {
+                    (a @ None, other @ Some(_)) => *a = other,
+                    (Some(a), Some(b)) => {
+                        if b > *a {
+                            *a = b;
+                        }
+                    }
+                    _ => {}
+                }
             }
         }
         if let Removable::False(..) = remove {
@@ -140,6 +186,23 @@ fn remove<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
         }
     }
     Ok(())
+}
+
+fn duration_to_string(ts: Option<Duration>) -> Cow<'static, str> {
+    if let Some(ts) = ts {
+        let s = ts.as_secs();
+        if s < 100 {
+            Cow::Owned(format!("{} seconds", s))
+        } else if s < 6000 {
+            Cow::Owned(format!("{} minutes", s / 60))
+        } else if s < 6000 * 60 {
+            Cow::Owned(format!("{} hours", s / 60 / 60))
+        } else {
+            Cow::Owned(format!("{} days", s / 60 / 60 / 24))
+        }
+    } else {
+        Cow::Borrowed("")
+    }
 }
 
 fn main() {
@@ -229,12 +292,22 @@ fn main() {
                         println!("Error removing {}: {}", entry_path.display(), e);
                     }
                 }
-                Ok(Removable::True { size }) => {
-                    println!(
-                        "{} can be removed (saving {:.1} GB)",
-                        entry_path.display(),
-                        size as f32 / 1000000000.0
-                    );
+                Ok(Removable::True { size, timestamp }) => {
+                    if let Some(timestamp) = timestamp {
+                        let ts_age = timestamp.elapsed();
+                        println!(
+                            "{} can be removed (saving {:.1} GB) -- {} old",
+                            entry_path.display(),
+                            size as f32 / 1000000000.0,
+                            duration_to_string(ts_age.ok()),
+                        );
+                    } else {
+                        println!(
+                            "{} can be removed (saving {:.1} GB)",
+                            entry_path.display(),
+                            size as f32 / 1000000000.0
+                        );
+                    }
                     if ok_to_remove {
                         if let Err(e) = remove(&entry_path) {
                             println!("Error removing {}: {}", entry_path.display(), e);
