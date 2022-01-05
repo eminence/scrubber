@@ -210,24 +210,24 @@ fn main() {
         .version("0.0.1")
         .about("Removes unused folders from a temp directory")
         .arg(
-            Arg::with_name("rm")
+            Arg::new("rm")
                 .long("rm")
                 .help("Actually remove directories"),
         )
         .arg(
-            Arg::with_name("no-atime")
+            Arg::new("no-atime")
                 .long("no-atime")
                 .help("Don't consider atime (only look at mtime)"),
         )
         .arg(
-            Arg::with_name("tmpdir")
+            Arg::new("tmpdir")
                 .index(1)
                 .required(false)
                 .help("Path to tempdir.  Defaults to $HOME/tmp or $TMPDIR/$USERNAME"),
         )
         .arg(
-            Arg::with_name("verbose")
-                .short("v")
+            Arg::new("verbose")
+                .short('v')
                 .long("verbose")
                 .help("More verbose output"),
         )
